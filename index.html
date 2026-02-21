@@ -2,112 +2,60 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>YugaTek Challenge – Arcade</title>
+<title>YugaTek Challenge - Tetris</title>
 <style>
 body{
-    margin:0;
-    background:linear-gradient(180deg,#0f172a,#020617);
-    font-family:Arial, sans-serif;
-    color:white;
-    text-align:center;
-    overflow:hidden;
+margin:0;
+background:#0f172a;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+overflow:hidden;
+font-family:Arial;
+color:white;
 }
-h1{margin-top:15px;}
-
-#container{
-    display:flex;
-    justify-content:center;
-    gap:30px;
-    margin-top:10px;
-    flex-wrap:wrap;
+#gameContainer{
+text-align:center;
 }
-
 canvas{
-    background:#111;
-    border:3px solid #38bdf8;
-    box-shadow:0 0 25px #38bdf8;
+background:#111827;
+box-shadow:0 0 20px cyan;
+border-radius:12px;
 }
-
-#panel{
-    text-align:left;
-    min-width:200px;
-}
-
 button{
-    padding:8px 14px;
-    margin:5px 5px 5px 0;
-    cursor:pointer;
-    border:none;
-    background:#38bdf8;
-    color:black;
-    font-weight:bold;
-    border-radius:5px;
+margin-top:10px;
+padding:8px 15px;
+background:cyan;
+border:none;
+border-radius:6px;
+cursor:pointer;
+font-weight:bold;
 }
 </style>
 </head>
 <body>
 
-<h1>YugaTek Challenge</h1>
-<p>Arcade Mode – Build Focus. Beat Your Limits.</p>
-
-<div id="container">
-    <canvas id="game" width="300" height="600"></canvas>
-
-    <div id="panel">
-        <p>Score: <span id="score">0</span></p>
-        <p>Level: <span id="level">1</span></p>
-        <p>Combo: <span id="combo">0</span>x</p>
-        <p>High Score: <span id="highScore">0</span></p>
-
-        <button onclick="togglePause()">Pause</button>
-        <button onclick="resetGame()">Restart</button>
-        <button onclick="toggleMusic()">Music</button>
-    </div>
+<div id="gameContainer">
+<h2>YugaTek Challenge</h2>
+<p>Score: <span id="score">0</span> |
+High Score: <span id="highScore">0</span></p>
+<canvas id="tetris" width="300" height="600"></canvas>
+<br>
+<button onclick="toggleMusic()">Toggle Music</button>
 </div>
 
 <script>
-const canvas=document.getElementById("game");
+const canvas=document.getElementById("tetris");
 const ctx=canvas.getContext("2d");
 
-const ROWS=20;
 const COLS=10;
+const ROWS=20;
 const SIZE=30;
 
-let grid=createGrid();
-let score=0;
-let level=1;
-let combo=0;
-let dropInterval=800;
-let dropCounter=0;
-let lastTime=0;
-let isPaused=false;
+let grid=Array.from({length:ROWS},()=>Array(COLS).fill(0));
 
-let highScore=parseInt(localStorage.getItem("yt_arcade_high"))||0;
-document.getElementById("highScore").innerText=highScore;
-
-/* AUDIO */
-let bgMusic=new Audio("music.mp3");
-bgMusic.loop=true;
-bgMusic.volume=0.4;
-
-let clearSound=new Audio("lineclear.mp3");
-clearSound.volume=0.6;
-
-function toggleMusic(){
-    if(bgMusic.paused){
-        bgMusic.play();
-    }else{
-        bgMusic.pause();
-    }
-}
-
-function playClearSound(){
-    clearSound.currentTime=0;
-    clearSound.play();
-}
-
-/* PIECES */
-const pieces=[
+const tetrominoes=[
 [[1,1,1,1]],
 [[1,1],[1,1]],
 [[0,1,0],[1,1,1]],
@@ -117,78 +65,146 @@ const pieces=[
 [[0,1,1],[1,1,0]]
 ];
 
-let player={x:3,y:0,shape:randomPiece()};
+let piece;
+let score=0;
+let level=1;
+let dropInterval=800;
+let lastDrop=0;
+let combo=0;
 
-function createGrid(){
-return Array.from({length:ROWS},()=>Array(COLS).fill(0));
+let highScore=localStorage.getItem("yt_arcade_high")||0;
+document.getElementById("highScore").innerText=highScore;
+
+let bgMusic=new Audio("music.mp3");
+bgMusic.loop=true;
+bgMusic.volume=0.4;
+
+let clearSound=new Audio("lineclear.mp3");
+
+function playClearSound(){
+clearSound.currentTime=0;
+clearSound.play();
 }
 
-function randomPiece(){
-return pieces[Math.floor(Math.random()*pieces.length)];
+function toggleMusic(){
+if(bgMusic.paused){
+bgMusic.volume=0;
+bgMusic.play();
+let fadeIn=setInterval(()=>{
+if(bgMusic.volume<0.4){
+bgMusic.volume+=0.02;
+}else clearInterval(fadeIn);
+},100);
+}else{
+let fadeOut=setInterval(()=>{
+if(bgMusic.volume>0.05){
+bgMusic.volume-=0.02;
+}else{
+bgMusic.pause();
+clearInterval(fadeOut);
+}
+},100);
+}
 }
 
-function drawCell(x,y,color="#38bdf8"){
+function newPiece(){
+let shape=tetrominoes[Math.floor(Math.random()*tetrominoes.length)];
+piece={
+shape:shape,
+x:Math.floor(COLS/2)-Math.floor(shape[0].length/2),
+y:0
+};
+if(collide()) gameOver();
+}
+
+function drawCell(x,y,color){
 ctx.fillStyle=color;
-ctx.fillRect(x*SIZE,y*SIZE,SIZE-1,SIZE-1);
+ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+ctx.strokeStyle="#0f172a";
+ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
 }
 
 function draw(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
-grid.forEach((row,y)=>{
-row.forEach((val,x)=>{
-if(val) drawCell(x,y);
-});
-});
+for(let y=0;y<ROWS;y++)
+for(let x=0;x<COLS;x++)
+if(grid[y][x]) drawCell(x,y,"#22d3ee");
 
-player.shape.forEach((row,y)=>{
-row.forEach((val,x)=>{
-if(val) drawCell(player.x+x,player.y+y,"#22d3ee");
+piece.shape.forEach((row,dy)=>{
+row.forEach((val,dx)=>{
+if(val) drawCell(piece.x+dx,piece.y+dy,"cyan");
 });
 });
 }
 
 function collide(){
-return player.shape.some((row,y)=>
-row.some((val,x)=>{
+return piece.shape.some((row,dy)=>
+row.some((val,dx)=>{
 if(!val) return false;
-let nx=player.x+x;
-let ny=player.y+y;
-return nx<0||nx>=COLS||ny>=ROWS||grid[ny]?.[nx];
+let x=piece.x+dx;
+let y=piece.y+dy;
+return x<0||x>=COLS||y>=ROWS||grid[y][x];
 }));
 }
 
 function merge(){
-player.shape.forEach((row,y)=>{
-row.forEach((val,x)=>{
-if(val) grid[player.y+y][player.x+x]=1;
+piece.shape.forEach((row,dy)=>{
+row.forEach((val,dx)=>{
+if(val) grid[piece.y+dy][piece.x+dx]=1;
 });
 });
 }
 
 function rotate(){
-const rotated=player.shape[0].map((_,i)=>
-player.shape.map(row=>row[i]).reverse()
-);
-player.shape=rotated;
-if(collide()) player.shape=rotated;
+let rotated=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
+let prev=piece.shape;
+piece.shape=rotated;
+if(collide()) piece.shape=prev;
 }
 
-/* HARD DROP */
-function hardDrop(){
-while(!collide()){
-player.y++;
+let particles=[];
+
+function createExplosion(rowY){
+for(let x=0;x<COLS;x++){
+for(let i=0;i<6;i++){
+particles.push({
+x:x*SIZE+SIZE/2,
+y:rowY*SIZE+SIZE/2,
+vx:(Math.random()-0.5)*6,
+vy:(Math.random()-0.5)*6,
+size:Math.random()*4+2,
+alpha:1
+});
 }
-player.y--;
+}
 }
 
-/* LINE CLEAR WITH FLASH */
+function updateParticles(){
+particles.forEach(p=>{
+p.x+=p.vx;
+p.y+=p.vy;
+p.vy+=0.15;
+p.alpha-=0.02;
+});
+particles=particles.filter(p=>p.alpha>0);
+}
+
+function drawParticles(){
+particles.forEach(p=>{
+ctx.globalAlpha=p.alpha;
+ctx.fillStyle="#22d3ee";
+ctx.beginPath();
+ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+ctx.fill();
+ctx.globalAlpha=1;
+});
+}
+
 function clearLines(){
 let lines=[];
 for(let y=ROWS-1;y>=0;y--){
-if(grid[y].every(v=>v===1)){
-lines.push(y);
-}
+if(grid[y].every(v=>v===1)) lines.push(y);
 }
 
 if(lines.length>0){
@@ -197,9 +213,7 @@ score+=(lines.length*100)*combo;
 playClearSound();
 
 lines.forEach(y=>{
-for(let x=0;x<COLS;x++){
-drawCell(x,y,"white");
-}
+createExplosion(y);
 });
 
 setTimeout(()=>{
@@ -214,96 +228,76 @@ highScore=score;
 localStorage.setItem("yt_arcade_high",highScore);
 document.getElementById("highScore").innerText=highScore;
 }
-}else{
-combo=0;
-}
+}else combo=0;
 
 if(score>=level*500){
 level++;
 dropInterval*=0.85;
 }
-}
-
-function update(time=0){
-if(isPaused){
-requestAnimationFrame(update);
-return;
-}
-
-const delta=time-lastTime;
-lastTime=time;
-dropCounter+=delta;
-
-if(dropCounter>dropInterval){
-player.y++;
-dropCounter=0;
-
-if(collide()){
-player.y--;
-merge();
-clearLines();
-player={x:3,y:0,shape:randomPiece()};
-
-if(collide()){
-alert("Game Over!");
-resetGame();
-}
-}
-}
 
 document.getElementById("score").innerText=score;
-document.getElementById("level").innerText=level;
-document.getElementById("combo").innerText=combo;
+}
 
+function drop(time=0){
+if(time-lastDrop>dropInterval){
+piece.y++;
+if(collide()){
+piece.y--;
+merge();
+clearLines();
+newPiece();
+}
+lastDrop=time;
+}
+}
+
+function gameOver(){
+alert("Game Over!");
+grid=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+score=0;
+level=1;
+dropInterval=800;
+document.getElementById("score").innerText=score;
+}
+
+document.addEventListener("keydown",e=>{
+if(e.key==="ArrowLeft"){
+e.preventDefault();
+piece.x--;
+if(collide()) piece.x++;
+}
+if(e.key==="ArrowRight"){
+e.preventDefault();
+piece.x++;
+if(collide()) piece.x--;
+}
+if(e.key==="ArrowDown"){
+e.preventDefault();
+piece.y++;
+if(collide()){
+piece.y--;
+merge();
+clearLines();
+newPiece();
+}
+}
+if(e.key==="ArrowUp"){
+e.preventDefault();
+rotate();
+}
+});
+
+function update(time=0){
+drop(time);
 draw();
+updateParticles();
+drawParticles();
 requestAnimationFrame(update);
 }
 
-/* CONTROLS */
-document.addEventListener("keydown",e=>{
-if(["ArrowLeft","ArrowRight","ArrowDown","ArrowUp","Space"].includes(e.code)){
-e.preventDefault();
-}
-
-if(e.code==="ArrowLeft") player.x--;
-if(e.code==="ArrowRight") player.x++;
-if(e.code==="ArrowDown") player.y++;
-if(e.code==="ArrowUp") rotate();
-if(e.code==="Space") hardDrop();
-
-if(collide()){
-if(e.code==="ArrowLeft") player.x++;
-if(e.code==="ArrowRight") player.x--;
-if(e.code==="ArrowDown") player.y--;
-}
-});
-
-function togglePause(){isPaused=!isPaused;}
-
-function resetGame(){
-grid=createGrid();
-score=0;
-level=1;
-combo=0;
-dropInterval=800;
-player={x:3,y:0,shape:randomPiece()};
-}
-
-/* MOBILE */
-let touchStartX=0;
-canvas.addEventListener("touchstart",e=>{
-touchStartX=e.touches[0].clientX;
-});
-
-canvas.addEventListener("touchmove",e=>{
-let diff=e.touches[0].clientX-touchStartX;
-if(diff>30){player.x++;touchStartX=e.touches[0].clientX;}
-if(diff<-30){player.x--;touchStartX=e.touches[0].clientX;}
-});
-
-canvas.addEventListener("touchend",()=>player.y++);
-
+newPiece();
 update();
 </script>
+
 </body>
 </html>
