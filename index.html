@@ -24,9 +24,14 @@ position:relative;
 
 canvas{
 background:#111827;
-box-shadow:0 0 25px cyan;
 border-radius:12px;
+animation:glowPulse 2.5s infinite alternate;
 transition:transform 0.1s ease;
+}
+
+@keyframes glowPulse{
+0%{ box-shadow:0 0 15px #22d3ee; }
+100%{ box-shadow:0 0 35px #22d3ee; }
 }
 
 button{
@@ -53,7 +58,8 @@ color:cyan;
 opacity:0;
 pointer-events:none;
 font-weight:bold;
-text-shadow:0 0 15px cyan;
+text-shadow:0 0 20px cyan;
+transition:all 0.3s ease;
 }
 
 #gameOverModal{
@@ -112,6 +118,9 @@ const ROWS=20;
 const SIZE=30;
 
 let grid=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+let clearingLines=[];
+let sweepX=0;
+let isClearing=false;
 
 const tetrominoes=[
 [[1,1,1,1]],
@@ -178,6 +187,7 @@ ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
 
 function draw(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
+
 for(let y=0;y<ROWS;y++)
 for(let x=0;x<COLS;x++)
 if(grid[y][x]) drawCell(x,y,"#22d3ee");
@@ -187,6 +197,13 @@ row.forEach((val,dx)=>{
 if(val) drawCell(piece.x+dx,piece.y+dy,"cyan");
 });
 });
+
+if(isClearing){
+ctx.fillStyle="white";
+clearingLines.forEach(y=>{
+ctx.fillRect(0,y*SIZE,sweepX,SIZE);
+});
+}
 }
 
 function collide(){
@@ -214,49 +231,11 @@ piece.shape=rotated;
 if(collide()) piece.shape=prev;
 }
 
-let particles=[];
-
-function createExplosion(rowY){
-for(let x=0;x<COLS;x++){
-for(let i=0;i<5;i++){
-particles.push({
-x:x*SIZE+SIZE/2,
-y:rowY*SIZE+SIZE/2,
-vx:(Math.random()-0.5)*6,
-vy:(Math.random()-0.5)*6,
-size:Math.random()*4+2,
-alpha:1
-});
-}
-}
-}
-
-function updateParticles(){
-particles.forEach(p=>{
-p.x+=p.vx;
-p.y+=p.vy;
-p.vy+=0.15;
-p.alpha-=0.02;
-});
-particles=particles.filter(p=>p.alpha>0);
-}
-
-function drawParticles(){
-particles.forEach(p=>{
-ctx.globalAlpha=p.alpha;
-ctx.fillStyle="#22d3ee";
-ctx.beginPath();
-ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-ctx.fill();
-ctx.globalAlpha=1;
-});
-}
-
-function showCombo(lines){
+function showCombo(){
 let popup=document.getElementById("comboPopup");
 popup.innerText="COMBO x"+combo;
 popup.style.opacity=1;
-popup.style.transform="translate(-50%,-60%) scale(1.2)";
+popup.style.transform="translate(-50%,-60%) scale(1.3)";
 setTimeout(()=>{
 popup.style.opacity=0;
 popup.style.transform="translate(-50%,-50%) scale(1)";
@@ -264,41 +243,39 @@ popup.style.transform="translate(-50%,-50%) scale(1)";
 }
 
 function clearLines(){
-let lines=[];
+if(isClearing) return;
+
+clearingLines=[];
 for(let y=ROWS-1;y>=0;y--){
-if(grid[y].every(v=>v===1)) lines.push(y);
+if(grid[y].every(v=>v===1)) clearingLines.push(y);
 }
 
-if(lines.length>0){
+if(clearingLines.length>0){
+isClearing=true;
 combo++;
-score+=(lines.length*100)*combo;
+score+=(clearingLines.length*100)*combo;
 playClearSound();
-lines.forEach(y=>createExplosion(y));
-showCombo(lines.length);
-
-if(score>highScore){
-highScore=score;
-localStorage.setItem("yt_arcade_high",highScore);
-document.getElementById("highScore").innerText=highScore;
-}
+showCombo();
+sweepX=0;
 }else combo=0;
+}
 
-lines.forEach(y=>{
+function updateClearAnimation(){
+if(isClearing){
+sweepX+=20;
+if(sweepX>=canvas.width){
+clearingLines.forEach(y=>{
 grid.splice(y,1);
 grid.unshift(Array(COLS).fill(0));
 });
-
-if(score>=level*500){
-level++;
-dropInterval*=0.85;
-document.getElementById("level").innerText=level;
+isClearing=false;
+clearingLines=[];
 }
-
-document.getElementById("score").innerText=score;
+}
 }
 
 function drop(time=0){
-if(time-lastDrop>dropInterval){
+if(time-lastDrop>dropInterval && !isClearing){
 piece.y++;
 if(collide()){
 piece.y--;
@@ -311,7 +288,7 @@ lastDrop=time;
 }
 
 function shakeScreen(){
-let intensity=15;
+let intensity=10;
 let shakes=15;
 let interval=setInterval(()=>{
 canvas.style.transform=`translate(${(Math.random()-0.5)*intensity}px, ${(Math.random()-0.5)*intensity}px)`;
@@ -349,9 +326,8 @@ if(e.key==="ArrowUp"){rotate();}
 
 function update(time=0){
 drop(time);
+updateClearAnimation();
 draw();
-updateParticles();
-drawParticles();
 requestAnimationFrame(update);
 }
 
