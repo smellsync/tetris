@@ -2,191 +2,282 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Glass Tetris</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Retro Glass Tetris</title>
 
 <style>
-html, body{
+html,body{
 margin:0;
 padding:0;
 background:#0f172a;
 overflow:hidden;
-height:100%;
-}
-
-body{
-position:fixed;
-width:100%;
 font-family:Arial;
-color:white;
 }
 
-#gameWrapper{
+/* ===== CONSOLE BODY ===== */
+
+#console{
+position:relative;
+width:100%;
+height:100vh;
 display:flex;
 justify-content:center;
 align-items:center;
-height:100vh;
-gap:40px;
+background:#1e293b;
+}
+
+#bodyShell{
+background:#cbd5e1;
+border-radius:40px;
+padding:40px 30px 140px 30px;
+box-shadow:
+inset -8px -8px 20px rgba(0,0,0,0.2),
+inset 8px 8px 20px rgba(255,255,255,0.4),
+0 20px 60px rgba(0,0,0,0.5);
+position:relative;
+}
+
+#screenBezel{
+background:#0b1220;
+padding:20px;
+border-radius:20px;
+box-shadow:inset 0 0 20px rgba(0,0,0,0.6);
 }
 
 canvas{
-background:#0b1220;
-border-radius:12px;
-box-shadow:0 0 30px rgba(0,255,255,0.3);
+display:block;
 }
 
-#sidePanel{
+/* ===== SPEAKERS ===== */
+
+.speaker{
+position:absolute;
+bottom:25px;
+width:80px;
+height:80px;
+display:grid;
+grid-template-columns:repeat(6,1fr);
+gap:4px;
+}
+
+.speaker div{
+background:#94a3b8;
+border-radius:50%;
+width:6px;
+height:6px;
+}
+
+#leftSpeaker{ left:30px; }
+#rightSpeaker{ right:30px; }
+
+/* ===== TOP BUTTONS ===== */
+
+.topButtons{
+position:absolute;
+top:10px;
+left:0;
+width:100%;
+display:flex;
+justify-content:space-between;
+padding:0 40px;
+}
+
+.topButtons button{
+background:#475569;
+border:none;
+color:white;
+padding:6px 12px;
+border-radius:6px;
+}
+
+/* ===== CENTER D-PAD ===== */
+
+#controls{
+position:absolute;
+bottom:20px;
+left:0;
+width:100%;
+display:flex;
+justify-content:center;
+gap:80px;
+}
+
+.dpad{
 display:flex;
 flex-direction:column;
 align-items:center;
-gap:20px;
+gap:10px;
 }
 
-button{
-padding:8px 15px;
+.middleRow{
+display:flex;
+gap:10px;
+}
+
+.dpad button{
+width:55px;
+height:55px;
+background:#475569;
 border:none;
-border-radius:6px;
-background:#1e293b;
+border-radius:12px;
 color:white;
-cursor:pointer;
+font-size:20px;
+box-shadow:0 4px 0 #334155;
 }
 
-button:hover{
+.dpad button:active{
+transform:translateY(3px);
+box-shadow:0 1px 0 #334155;
+}
+
+.rotateBtn{
+width:65px;
+height:65px;
+border-radius:50%;
 background:#334155;
+border:none;
+color:white;
+font-size:22px;
+box-shadow:0 5px 0 #1f2937;
+}
+
+.rotateBtn:active{
+transform:translateY(3px);
+box-shadow:0 2px 0 #1f2937;
+}
+
+@media(min-width:768px){
+#controls{ display:none; }
 }
 </style>
 </head>
 
 <body>
 
-<div id="gameWrapper">
-<canvas id="game" width="300" height="600"></canvas>
+<div id="console">
+<div id="bodyShell">
 
-<div id="sidePanel">
-<div>NEXT</div>
-<canvas id="next" width="120" height="120"></canvas>
-<button id="pauseBtn">Pause</button>
-<button id="musicBtn">Music ON</button>
+<div class="topButtons">
+<button onclick="goHome()">🏠 Home</button>
+<button onclick="togglePause()">⏸ Pause</button>
+</div>
+
+<div id="screenBezel">
+<canvas id="game" width="300" height="600"></canvas>
+</div>
+
+<div id="controls">
+<div class="dpad">
+<button onclick="rotatePiece()">▲</button>
+<div class="middleRow">
+<button onclick="moveLeft()">◀</button>
+<button onclick="moveDown()">▼</button>
+<button onclick="moveRight()">▶</button>
+</div>
+</div>
+
+<button class="rotateBtn" onclick="hardDrop()">⤓</button>
+</div>
+
+<div id="leftSpeaker" class="speaker"></div>
+<div id="rightSpeaker" class="speaker"></div>
+
 </div>
 </div>
 
 <script>
+/* Speaker dots */
+document.querySelectorAll(".speaker").forEach(s=>{
+for(let i=0;i<36;i++){
+let dot=document.createElement("div");
+s.appendChild(dot);
+}
+});
+
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
-const nextCanvas=document.getElementById("next");
-const nextCtx=nextCanvas.getContext("2d");
 
-const pauseBtn=document.getElementById("pauseBtn");
-const musicBtn=document.getElementById("musicBtn");
-
-const COLS=10;
-const ROWS=20;
-const SIZE=30;
-
+const COLS=10, ROWS=20, SIZE=30;
 let grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
-let piece;
-let nextPiece;
-let particles=[];
 let paused=false;
+let piece,nextPiece;
+let particles=[];
 let musicOn=true;
 
-/* ---------- AUDIO ---------- */
-const bgMusic=new Audio("bg.mp3"); // replace with your file
+/* AUDIO */
+const bgMusic=new Audio("bg.mp3");
 bgMusic.loop=true;
 bgMusic.volume=0.4;
 
-const clearSound=new Audio("clear.mp3"); // replace with your file
-clearSound.volume=0.6;
+const clearSound=new Audio("clear.mp3");
 
-/* ---------- PIECES ---------- */
+/* PIECES */
 const shapes=[
-{shape:[[1,1,1,1]], color:"#00f0ff"},
-{shape:[[1,1],[1,1]], color:"#ffe600"},
-{shape:[[0,1,0],[1,1,1]], color:"#a000ff"},
-{shape:[[1,0,0],[1,1,1]], color:"#ff7a00"},
-{shape:[[0,0,1],[1,1,1]], color:"#0077ff"},
-{shape:[[1,1,0],[0,1,1]], color:"#00ff66"},
-{shape:[[0,1,1],[1,1,0]], color:"#ff0033"}
+{shape:[[1,1,1,1]],color:"#00f0ff"},
+{shape:[[1,1],[1,1]],color:"#ffe600"},
+{shape:[[0,1,0],[1,1,1]],color:"#a000ff"},
+{shape:[[1,0,0],[1,1,1]],color:"#ff7a00"},
+{shape:[[0,0,1],[1,1,1]],color:"#0077ff"},
+{shape:[[1,1,0],[0,1,1]],color:"#00ff66"},
+{shape:[[0,1,1],[1,1,0]],color:"#ff0033"}
 ];
 
 function randomPiece(){
 let p=shapes[Math.floor(Math.random()*shapes.length)];
-return {shape:p.shape,color:p.color,x:3,y:0};
+return {shape:p.shape.map(r=>[...r]),color:p.color,x:3,y:0};
 }
 
-function spawnPiece(){
+function spawn(){
 if(!nextPiece) nextPiece=randomPiece();
 piece=nextPiece;
-piece.x=3;
-piece.y=0;
+piece.x=3; piece.y=0;
 nextPiece=randomPiece();
-drawNext();
-if(collide()) resetGame();
+if(collide()) reset();
 }
 
-/* ---------- DRAW ---------- */
-
-function drawGlass(x,y,color,alpha=0.55){
-let px=x*SIZE;
-let py=y*SIZE;
-
-ctx.save();
-ctx.globalAlpha=alpha;
-ctx.fillStyle=color;
-ctx.fillRect(px,py,SIZE,SIZE);
-
-let grad=ctx.createLinearGradient(px,py,px+SIZE,py+SIZE);
-grad.addColorStop(0,"rgba(255,255,255,0.4)");
-grad.addColorStop(1,"rgba(255,255,255,0)");
-ctx.fillStyle=grad;
-ctx.fillRect(px,py,SIZE,SIZE);
-
-ctx.strokeStyle="rgba(255,255,255,0.25)";
-ctx.strokeRect(px,py,SIZE,SIZE);
-ctx.restore();
+function collide(){
+return piece.shape.some((row,dy)=>
+row.some((v,dx)=>{
+if(!v) return false;
+let x=piece.x+dx;
+let y=piece.y+dy;
+return x<0||x>=COLS||y>=ROWS||grid[y]?.[x];
+}));
 }
 
-function drawGhost(){
-let ghostY=piece.y;
-while(!collisionAt(piece.x,ghostY+1)) ghostY++;
-
-ctx.save();
-ctx.globalAlpha=0.18;
-ctx.setLineDash([4,4]);
-ctx.strokeStyle="#ffffff";
-ctx.lineWidth=1;
-
+function merge(){
 piece.shape.forEach((row,dy)=>{
 row.forEach((v,dx)=>{
-if(v){
-ctx.strokeRect(
-(piece.x+dx)*SIZE,
-(ghostY+dy)*SIZE,
-SIZE,
-SIZE
-);
-}
+if(v) grid[piece.y+dy][piece.x+dx]=piece.color;
 });
 });
-ctx.restore();
 }
 
-function drawParticles(){
-particles.forEach(p=>{
-ctx.save();
-ctx.globalAlpha=p.life;
-ctx.translate(p.x,p.y);
-ctx.rotate(p.rot);
-ctx.fillStyle=p.color;
-ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size);
-ctx.restore();
+function clearLines(){
+for(let y=ROWS-1;y>=0;y--){
+if(grid[y].every(c=>c)){
+createShatter(y);
+grid.splice(y,1);
+grid.unshift(Array(COLS).fill(null));
+clearSound.play().catch(()=>{});
+if(navigator.vibrate) navigator.vibrate(120);
+}
+}
+}
 
-p.x+=p.vx;
-p.y+=p.vy;
-p.vy+=0.2;
-p.rot+=0.1;
-p.life-=0.02;
+function createShatter(row){
+for(let x=0;x<COLS;x++){
+for(let i=0;i<4;i++){
+particles.push({
+x:x*SIZE+15,
+y:row*SIZE+15,
+vx:(Math.random()-0.5)*6,
+vy:(Math.random()-1)*6,
+life:1,
+color:grid[row][x]
 });
-particles=particles.filter(p=>p.life>0);
+}
+}
 }
 
 function draw(){
@@ -194,164 +285,104 @@ ctx.clearRect(0,0,canvas.width,canvas.height);
 
 for(let y=0;y<ROWS;y++)
 for(let x=0;x<COLS;x++)
-if(grid[y][x])
-drawGlass(x,y,grid[y][x]);
+if(grid[y][x]){
+ctx.globalAlpha=0.6;
+ctx.fillStyle=grid[y][x];
+ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+ctx.strokeStyle="rgba(255,255,255,0.3)";
+ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
+}
 
-drawGhost();
-
+ctx.globalAlpha=0.8;
 piece.shape.forEach((row,dy)=>{
 row.forEach((v,dx)=>{
-if(v)
-drawGlass(piece.x+dx,piece.y+dy,piece.color,0.65);
+if(v){
+ctx.fillStyle=piece.color;
+ctx.fillRect((piece.x+dx)*SIZE,(piece.y+dy)*SIZE,SIZE,SIZE);
+}
 });
 });
 
-drawParticles();
+particles.forEach(p=>{
+ctx.globalAlpha=p.life;
+ctx.fillStyle=p.color;
+ctx.fillRect(p.x,p.y,6,6);
+p.x+=p.vx;
+p.y+=p.vy;
+p.vy+=0.2;
+p.life-=0.03;
+});
+particles=particles.filter(p=>p.life>0);
 
 if(paused){
 ctx.fillStyle="rgba(0,0,0,0.6)";
 ctx.fillRect(0,0,canvas.width,canvas.height);
 ctx.fillStyle="white";
-ctx.font="40px Arial";
-ctx.fillText("PAUSED",70,300);
+ctx.font="30px Arial";
+ctx.fillText("PAUSED",90,300);
 }
 }
 
-function drawNext(){
-nextCtx.clearRect(0,0,120,120);
-nextPiece.shape.forEach((row,dy)=>{
-row.forEach((v,dx)=>{
-if(v){
-let s=25;
-nextCtx.globalAlpha=0.6;
-nextCtx.fillStyle=nextPiece.color;
-nextCtx.fillRect(dx*s+20,dy*s+20,s,s);
-}
-});
-});
-}
+/* Proper gravity */
+let dropCounter=0;
+let dropInterval=800;
+let lastTime=0;
 
-/* ---------- LOGIC ---------- */
+function update(time=0){
+const delta=time-lastTime;
+lastTime=time;
+dropCounter+=delta;
 
-function collide(){
-return collisionAt(piece.x,piece.y);
-}
-
-function collisionAt(x,y){
-return piece.shape.some((row,dy)=>
-row.some((v,dx)=>{
-if(!v) return false;
-let nx=x+dx;
-let ny=y+dy;
-return nx<0||nx>=COLS||ny>=ROWS||grid[ny][nx];
-}));
-}
-
-function merge(){
-piece.shape.forEach((row,dy)=>{
-row.forEach((v,dx)=>{
-if(v)
-grid[piece.y+dy][piece.x+dx]=piece.color;
-});
-});
-}
-
-function clearLines(){
-for(let y=ROWS-1;y>=0;y--){
-if(grid[y].every(cell=>cell)){
-createShatter(y);
-grid.splice(y,1);
-grid.unshift(Array(COLS).fill(null));
-if(musicOn) clearSound.play();
-}
-}
-}
-
-function createShatter(row){
-for(let x=0;x<COLS;x++){
-let color=grid[row][x];
-for(let i=0;i<4;i++){
-particles.push({
-x:x*SIZE+SIZE/2,
-y:row*SIZE+SIZE/2,
-vx:(Math.random()-0.5)*5,
-vy:(Math.random()-1)*5,
-size:8,
-color:color,
-rot:Math.random()*6,
-life:1
-});
-}
-}
-}
-
-function resetGame(){
-grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
-}
-
-/* ---------- CONTROLS ---------- */
-
-document.addEventListener("keydown",e=>{
-if(paused) return;
-
-if(e.key==="ArrowLeft"){piece.x--; if(collide()) piece.x++;}
-if(e.key==="ArrowRight"){piece.x++; if(collide()) piece.x--;}
-if(e.key==="ArrowDown"){
+if(!paused && dropCounter>dropInterval){
 piece.y++;
 if(collide()){
 piece.y--;
 merge();
 clearLines();
-spawnPiece();
+spawn();
 }
+dropCounter=0;
 }
-if(e.key==="ArrowUp"){
+
+draw();
+requestAnimationFrame(update);
+}
+
+/* Controls */
+function moveLeft(){ piece.x--; if(collide()) piece.x++; }
+function moveRight(){ piece.x++; if(collide()) piece.x--; }
+function moveDown(){ piece.y++; if(collide()){piece.y--; merge(); clearLines(); spawn();}}
+function rotatePiece(){
 let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
 let old=piece.shape;
 piece.shape=r;
 if(collide()) piece.shape=old;
 }
+function hardDrop(){
+while(!collide()) piece.y++;
+piece.y--;
+merge(); clearLines(); spawn();
+}
+function togglePause(){ paused=!paused; }
+function goHome(){ window.history.back(); }
+
+document.addEventListener("keydown",e=>{
+if(e.key==="ArrowLeft") moveLeft();
+if(e.key==="ArrowRight") moveRight();
+if(e.key==="ArrowDown") moveDown();
+if(e.key==="ArrowUp") rotatePiece();
 });
 
-/* ---------- BUTTONS ---------- */
-
-pauseBtn.onclick=()=>{
-paused=!paused;
-pauseBtn.innerText=paused?"Resume":"Pause";
-};
-
-musicBtn.onclick=()=>{
-musicOn=!musicOn;
-musicBtn.innerText=musicOn?"Music ON":"Music OFF";
-if(musicOn) bgMusic.play();
-else bgMusic.pause();
-};
-
-/* ---------- LOOP ---------- */
-
-let dropInterval=700;
-let lastTime=0;
-
-function update(time=0){
-if(!paused){
-if(time-lastTime>dropInterval){
-piece.y++;
-if(collide()){
-piece.y--;
-merge();
-clearLines();
-spawnPiece();
-}
-lastTime=time;
-}
-}
-draw();
-requestAnimationFrame(update);
-}
-
-spawnPiece();
-if(musicOn) bgMusic.play();
+/* Start */
+spawn();
 update();
+
+/* Safe audio start after interaction */
+document.body.addEventListener("click",()=>{
+if(musicOn){
+bgMusic.play().catch(()=>{});
+}
+},{once:true});
 </script>
 
 </body>
