@@ -15,14 +15,18 @@ color:white;
 overflow:hidden;
 }
 
-/* ===== LAYOUT ===== */
-
 #gameWrapper{
 display:flex;
 justify-content:center;
 align-items:center;
-height:100vh;
+height:100dvh;
 gap:40px;
+}
+
+#game{
+width:min(95vw,300px);
+height:auto;
+touch-action:none;
 }
 
 canvas{
@@ -30,8 +34,6 @@ background:#0b1220;
 border-radius:12px;
 box-shadow:0 0 30px rgba(0,255,255,0.3);
 }
-
-/* ===== SIDE PANEL (DESKTOP ONLY) ===== */
 
 #sidePanel{
 display:flex;
@@ -53,57 +55,29 @@ button:hover{
 background:#334155;
 }
 
-/* ===== MOBILE CONTROLS ===== */
-
-#mobileControls{
-display:none;
-position:fixed;
-bottom:20px;
-left:0;
-width:100%;
-justify-content:center;
-gap:50px;
+#gestureHelp{
+font-size:12px;
+opacity:.7;
+text-align:center;
+margin-top:8px;
 }
 
-.dpad{
-display:flex;
-flex-direction:column;
-align-items:center;
-gap:10px;
-}
-
-.middleRow{
-display:flex;
-gap:10px;
-}
-
-.dpad button{
-width:55px;
-height:55px;
-font-size:18px;
-border-radius:10px;
-}
-
-.rotateBtn{
-width:65px;
-height:65px;
-border-radius:50%;
-font-size:20px;
-}
-
-/* Show mobile controls on small screens */
 @media(max-width:768px){
 #gameWrapper{
 flex-direction:column;
-gap:10px;
+gap:5px;
+padding:10px;
+box-sizing:border-box;
 }
 
 #sidePanel{
 display:none;
 }
+}
 
-#mobileControls{
-display:flex;
+@media(min-width:769px){
+#gestureHelp{
+display:none;
 }
 }
 </style>
@@ -112,7 +86,12 @@ display:flex;
 <body>
 
 <div id="gameWrapper">
+<div>
 <canvas id="game" width="300" height="600"></canvas>
+<p id="gestureHelp">
+Tap = Rotate • Swipe ← → Move • Swipe ↓ Drop • Swipe ↑ Hard Drop
+</p>
+</div>
 
 <div id="sidePanel">
 <div>NEXT</div>
@@ -120,19 +99,6 @@ display:flex;
 <button id="pauseBtn">Pause</button>
 <button id="musicBtn">Music ON</button>
 </div>
-</div>
-
-<!-- MOBILE CONTROLS -->
-<div id="mobileControls">
-<div class="dpad">
-<button onclick="rotatePiece()">▲</button>
-<div class="middleRow">
-<button onclick="moveLeft()">◀</button>
-<button onclick="moveDown()">▼</button>
-<button onclick="moveRight()">▶</button>
-</div>
-</div>
-<button class="rotateBtn" onclick="hardDrop()">⤓</button>
 </div>
 
 <script>
@@ -152,16 +118,13 @@ let grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
 let piece,nextPiece;
 let paused=false;
 let musicOn=true;
-let particles=[];
 
-/* AUDIO */
 const bgMusic=new Audio("bg.mp3");
 bgMusic.loop=true;
 bgMusic.volume=0.4;
 
 const clearSound=new Audio("clear.mp3");
 
-/* PIECES */
 const shapes=[
 {shape:[[1,1,1,1]],color:"#00f0ff"},
 {shape:[[1,1],[1,1]],color:"#ffe600"},
@@ -187,8 +150,6 @@ drawNext();
 if(collide()) resetGame();
 }
 
-/* COLLISION */
-
 function collide(){
 return piece.shape.some((row,dy)=>
 row.some((v,dx)=>{
@@ -198,8 +159,6 @@ let y=piece.y+dy;
 return x<0||x>=COLS||y>=ROWS||(y>=0 && grid[y][x]);
 }));
 }
-
-/* MERGE + CLEAR */
 
 function merge(){
 piece.shape.forEach((row,dy)=>{
@@ -222,8 +181,6 @@ clearSound.play().catch(()=>{});
 function resetGame(){
 grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
 }
-
-/* DRAW */
 
 function draw(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -258,7 +215,6 @@ ctx.fillText("PAUSED",90,300);
 }
 
 function drawNext(){
-if(!nextCtx) return;
 nextCtx.clearRect(0,0,120,120);
 nextPiece.shape.forEach((row,dy)=>{
 row.forEach((v,dx)=>{
@@ -269,8 +225,6 @@ nextCtx.fillRect(dx*25+20,dy*25+20,25,25);
 });
 });
 }
-
-/* CONTROLS */
 
 function moveLeft(){piece.x--; if(collide()) piece.x++;}
 function moveRight(){piece.x++; if(collide()) piece.x--;}
@@ -305,22 +259,42 @@ if(e.key==="ArrowDown") moveDown();
 if(e.key==="ArrowUp") rotatePiece();
 });
 
-/* BUTTONS */
+let touchStartX=0;
+let touchStartY=0;
+let touchStartTime=0;
 
-if(pauseBtn){
+canvas.addEventListener("touchstart",(e)=>{
+const touch=e.touches[0];
+touchStartX=touch.clientX;
+touchStartY=touch.clientY;
+touchStartTime=Date.now();
+},{passive:true});
+
+canvas.addEventListener("touchend",(e)=>{
+if(paused) return;
+
+const touch=e.changedTouches[0];
+const dx=touch.clientX-touchStartX;
+const dy=touch.clientY-touchStartY;
+const absX=Math.abs(dx);
+const absY=Math.abs(dy);
+const duration=Date.now()-touchStartTime;
+
+if(absX<15 && absY<15 && duration<250){ rotatePiece(); return; }
+if(absX>absY && dx<-25){ moveLeft(); return; }
+if(absX>absY && dx>25){ moveRight(); return; }
+if(absY>absX && dy>25){ moveDown(); return; }
+if(absY>absX && dy<-25){ hardDrop(); return; }
+},{passive:true});
+
 pauseBtn.onclick=()=>paused=!paused;
-}
 
-if(musicBtn){
 musicBtn.onclick=()=>{
 musicOn=!musicOn;
 musicBtn.innerText=musicOn?"Music ON":"Music OFF";
 if(musicOn) bgMusic.play().catch(()=>{});
 else bgMusic.pause();
 };
-}
-
-/* GRAVITY */
 
 let dropCounter=0;
 let dropInterval=800;
@@ -346,16 +320,11 @@ draw();
 requestAnimationFrame(update);
 }
 
-/* START */
-
 spawn();
 update();
 
-/* Safe audio start */
 document.body.addEventListener("click",()=>{
-if(musicOn){
-bgMusic.play().catch(()=>{});
-}
+if(musicOn){ bgMusic.play().catch(()=>{}); }
 },{once:true});
 </script>
 
